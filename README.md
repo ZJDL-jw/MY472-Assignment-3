@@ -3,21 +3,17 @@
 Dr Thomas Robinson and Dr Dan de Kadt
 
 AT 2023
+# Introduction #
 
-Introduction
 This is a summative assignment, and will constitute 25% of your final grade. You should use feedback from seminars and your formative assessment to ensure you meet both the substantive and formatting standards for this module.
 
 For clarity, the formatting requirements for each assignment are:
 
-	You must present all results in full sentences, as you would in a report or academic piece of writing
-
-		If the exercise requires generating a table or figure, you should include at least one sentence introducing and explaining it. E.g. “The table below reports the counts of Wikipedia articles mentioning the LSE, by type of article.”
-	
-	Unless stated otherwise, all code used to answer the exercises should be included as a code appendix at the end of the script. This formatting can be achieved by following the guidance in the template.Rmd file (see Assignment 1).
-
-	All code should be annotated with comments, to help the marker understand what you have done
-
-	Your output should be replicable. Any result/table/figure that cannot be traced back to your code will not be marked
+* You must present all results in full sentences, as you would in a report or academic piece of writing
+  * If the exercise requires generating a table or figure, you should include at least one sentence introducing and explaining it. E.g. “The table below reports the counts of Wikipedia articles mentioning the LSE, by type of article.”
+* Unless stated otherwise, all code used to answer the exercises should be included as a code appendix at the end of the script. This formatting can be achieved by following the guidance in the template.Rmd file (see Assignment 1).
+* All code should be annotated with comments, to help the marker understand what you have done
+* Your output should be replicable. Any result/table/figure that cannot be traced back to your code will not be marked
 
 Exercise 1 (5 Marks)
 This assignment will take us through a workflow that a data scientist might encounter in the real world, from data collection right through to analysis. Throughout this assignment we are going to use a local relational database to store a variety of different but related tables that we collect and may want to combine in various ways. We will want to ensure that each table within our database can be joined to every other table using a primary key.
