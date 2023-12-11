@@ -15,14 +15,15 @@ For clarity, the formatting requirements for each assignment are:
 * All code should be annotated with comments, to help the marker understand what you have done
 * Your output should be replicable. Any result/table/figure that cannot be traced back to your code will not be marked
 
-Exercise 1 (5 Marks)
+# Exercise 1 (5 Marks)#
+
 This assignment will take us through a workflow that a data scientist might encounter in the real world, from data collection right through to analysis. Throughout this assignment we are going to use a local relational database to store a variety of different but related tables that we collect and may want to combine in various ways. We will want to ensure that each table within our database can be joined to every other table using a primary key.
 
 We will start by creating an empty local relational database. You should store this new database in a ‘database’ folder that you create within your assignment folder. Follow these steps:
 
-Use the DBI::dbConnect() function in R to create a new SQLite database (either YOUR_DB_NAME.sqlite or YOUR_DB_NAME.db) in your database folder.
-Use the file.exists() function in R to check for the existence of your relational database.
-Include in the main text of your .html submission the code that created the database and the code that checks for its existence and the output of that check.
+1. Use the DBI::dbConnect() function in R to create a new SQLite database (either YOUR_DB_NAME.sqlite or YOUR_DB_NAME.db) in your database folder.
+2. Use the file.exists() function in R to check for the existence of your relational database.
+Include in the main text of your .html submission the code that created the database *and* the code that checks for its existence *and* the output of that check.
 
 Exercise 2 (25 marks)
 a. Gathering structured data
