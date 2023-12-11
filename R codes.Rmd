@@ -1,0 +1,1003 @@
+---
+title: "Assignment 3"
+author: "Jiayu Wen"
+date: "AT 2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# this chunk contains code that sets global options for the entire .Rmd. 
+# we use include=FALSE to suppress it from the top of the document, but it will still appear in the appendix. 
+
+knitr::opts_chunk$set(echo = FALSE) # actually set the global chunk options. 
+# we set echo=FALSE to suppress code such that it by default does not appear throughout the document. 
+# note: this is different from .Rmd default
+```
+
+## Exercise 1 (5 Marks)
+
+```{r, include=FALSE}
+library(DBI)
+```
+
+```{r Q1, echo=TRUE}
+# Create a new SQLite database with a name in my database folder
+db <- dbConnect(RSQLite::SQLite(),
+                "database/assignment3_jiayu.sqlite")
+
+# Check if the database file exists
+db_exists <- file.exists("assignment3_jiayu.sqlite")
+
+# Display the output of the check
+cat("Does the database exist?", db_exists, "\n")
+```
+
+Now I have an `empty` relational database `assignment3_jiayu` in my local folder `database`.
+
+## Exercise 2 (25 marks)
+
+```{r, include=FALSE}
+library(rvest)
+library(dplyr)
+library(stringr)
+```
+
+### a. Gathering structured data
+
+The function is to gather structured data of R1 and R2 universities in the US from the Wikipedia page:
+
+```{r Q2a function}
+# Function to scrape all R1 and R2 Research Universities in the US from Wikipedia
+scrape_R1R2_unis <- function() {
+  # URL of the Wikipedia page with the list of research universities
+  url <- "https://en.wikipedia.org/wiki/List_of_research_universities_in_the_United_States"
+  # Store the url's HTML code
+  html_unis <- read_html(url)
+  # Extract the table containing university information
+  tables <- html_table(html_unis, fill = TRUE)
+  
+  # Store the initial R1 and R2 tables
+  R1 <- html_table(html_nodes(html_unis, "table")[[1]])
+  R2 <- html_table(html_nodes(html_unis, "table")[[2]])
+  # Remove the 5th column of R2 consisting of only missing values
+  R2 <- subset(R2, select = -which(sapply(R2, function(x) all(is.na(x)))))
+  
+  # Scrape the URLs of the universities' dedicated Wikipedia page by CSS and store them in a list "university_url"
+  
+  ## For R1
+  university_url <- c()
+  for (i in 1:nrow(R1)) {
+    university_url[i] <- html_unis %>%
+      html_elements(css = paste0("#mw-content-text > div.mw-content-ltr.mw-parser-output > table:nth-child(19) > tbody > tr:nth-child(", i+1, ") > td:nth-child(1) > a")) %>%
+      html_attr("href")
+  }
+  ## Add as a new column of "R1"
+  R1 <- R1 %>%
+    mutate(URL = paste0("https://en.wikipedia.org/", university_url))
+  
+  ## For R2
+  university_url <- c()
+  for (i in 1:nrow(R2)) {
+    university_url[i] <- html_unis %>%
+      html_elements(css = paste0("#mw-content-text > div.mw-content-ltr.mw-parser-output > table:nth-child(27) > tbody > tr:nth-child(", i+1, ") > td:nth-child(1) > a")) %>%
+      html_attr("href")
+  }
+  ## Add as a new column of "R2"
+  R2 <- R2 %>%
+    mutate(URL = paste0("https://en.wikipedia.org/", university_url))
+  
+  # Merge R1 and R2
+  R1R2_table <- bind_rows(R1, R2)
+ 
+  # Rename the columns
+  colnames(R1R2_table) <- c('University', 'Status', 'City', 'State', "URL")
+  
+  # Return the final data
+  return(R1R2_table)
+}
+```
+
+Now let's use the function `scrape_R1R2_unis()` to scrape R1 and R2 universities in the US and their key information.
+
+```{r Q2a call, cache=TRUE, include=FALSE}
+R1_R2_df_2a <- scrape_R1R2_unis()
+R1_R2_df_2a
+```
+
+The outcome `Table 1` shows the combined R1 and R2 universities in the US. For each university, the table contains its name, status (public or private), the city in which it is located, the state in which it is located and the URL of the university's dedicated Wikipedia page.
+
+### b. Gathering unstructured data
+
+The function is to gather unstructured data from the Wikipedia page with an argument of a dataframe storing the URLs to scrape:
+
+```{r Q2b function}
+# Function to scrape the given dedicated Wikipedia page for each university in dataframe df
+scrape_dedicated_wiki <- function(df) {
+  URLs <- df$URL
+  # Initialise 3 vectors to store the geographic coordinates, the endowment and the total number of students
+  geo_coordinates <- c()
+  endowment <- c()
+  student_num <- c()
+  # Set the regular expression of the geographic coordinates and the endowment to be extracted
+  geo_pattern <- "([0-9.°′″]+[NS]).*([0-9.°′″][WE])"
+  endowment_pattern <- "([0-9.]+)\\s*([a-zA-Z]+)"
+  
+  ## Loop through each university's dedicated Wikipedia page
+  for(i in 1:nrow(df)) { 
+    url_2b <- URLs[[i]]
+    html_2b <- read_html(url_2b)
+    # Scrape the labels in the biography and extract the text
+    labels_uni <- html_2b %>%
+      html_elements(css = ".infobox-label") %>%
+      html_text()
+    # Scrape the data in the biography and extract the text
+    data_uni <- html_2b %>%
+      html_elements(css = ".infobox-data") %>%
+      html_text()
+    # Access location text and extract the geographic coordinates
+    location <- html_2b %>%
+      html_elements(css =".geo-default") %>%
+      html_text()
+    if(length(location) == 0) {
+      # If there is no location data, assign a missing value
+      geo_coordinates[i] <- NA
+    } else {geo_coordinates[i] <- str_extract(location, geo_pattern)
+    }
+    # Access and extract the endowment
+    raw_endowment <- data_uni[labels_uni == "Endowment"]
+    if(length(raw_endowment) == 0) {
+      # If there is no endowment data, assign a missing value
+      endowment[i] <- NA
+    } else {endowment[i] <- str_extract(raw_endowment, endowment_pattern)
+    }
+    # Access and extract the student number in string form and convert it into a numeric
+    get_stu_num <- function(num_in_str) {
+      if(length(num_in_str) == 0) {
+        # If there is no student number data, assign 0
+        return(0)
+      } else {
+        raw_num <- str_extract(num_in_str, "[0-9]+,?[0-9]+")
+        raw_num <- gsub(",", "", raw_num)
+        number <- as.numeric(raw_num)
+        return(number)
+      }
+    }
+    raw_undergrad <- data_uni[labels_uni == "Undergraduates"]
+    undergrad_number <- get_stu_num(raw_undergrad)
+    raw_postgrad <- data_uni[labels_uni == "Postgraduates"]
+    postgrad_number <- get_stu_num(raw_postgrad)
+    stu_number <- undergrad_number + postgrad_number
+    # If there are neither Undergraduates and Postgraduates data, turn to the total student number
+    if (stu_number == 0) {
+      raw_total <- data_uni[labels_uni == "Students"]
+      stu_number <- get_stu_num(raw_total)
+    }
+    # If there is no total student number still, it means the student number information is missing, assign a missing value
+    if (stu_number == 0) {
+      stu_number <- NA
+    }
+    student_num[i] <- stu_number
+  }
+  # Convert the endowment value into numeric
+  endow_unit_pattern <- '([a-zA-Z]+)'
+  endow_num_pattern <- '([0-9,.]+)'
+  endowment_numeric <- c()
+  for(i in 1:length(endowment)){
+  if(!is.na(endowment[i])){
+    endow_str <- endowment[i]
+    endow_unit <- str_extract(endow_str, endow_unit_pattern)
+    endow_num <- str_extract(endow_str, endow_num_pattern)
+    if(endow_unit == 'billion'){
+      endowment_numeric[i] <- as.numeric(endow_num)*10^9
+    } else{
+      endowment_numeric[i] <- as.numeric(endow_num)*10^6
+      }
+    }
+  }
+  # Combine the 3 vectors into a dataframe by column while maintaining their data types
+  table_2b <- data.frame(geo_coordinates, endowment_numeric, student_num)
+  colnames(table_2b) <- c("Geographic Coordinates", "Endowment (in USD)", "Total Student Number")
+  results <- cbind(df, table_2b)
+  return(results)
+}
+```
+
+It is time to use the function `scrape_dedicated_wiki(df)` to scrape R1 and R2 universities' geographic coordinates, endowment and total number of students.
+
+```{r Q2b call, cache=TRUE, include=FALSE}
+R1_R2_df_2b <- scrape_dedicated_wiki(R1_R2_df_2a)
+R1_R2_df_2b
+```
+
+The table `Table 2` adds to `Table 1` the geographic coordinates of the (main) university campus, the endowment of the university in USD dollars and the total number of students (including both undergraduate and postgraduate).
+
+### c. Data munging
+
+Here I clean the `ivyleague.csv` file and merge it with `Table 2` to get three new variables:
+
+1.An indicator for whether the university is an Ivy League institution
+
+2.The university's county (it would be wise to concatenate both county and state into a single string, separated by ",")
+
+3.The university's EIN (which can be missing for those universities not in the Ivy League)
+
+After merging, I count the missing values in each column.
+
+```{r Q2c, include=FALSE}
+# Read the Ivy League file into R
+ivy_league <- read.csv("ivyleague.csv")
+
+# Pre-process the table by using the Ivy League Institutions' full names and merging county and state
+ivy_league <- ivy_league %>%
+  mutate(County = paste0(county, ", ", state),
+         University = paste0(uni_name, " ", "University")) %>%
+  mutate(University = if_else(uni_name == "Penn", "University of Pennsylvania", University)) %>%
+  mutate(University = if_else(uni_name == "Dartmouth", "Dartmouth College", University)) %>%
+  select(-uni_name, -county, -state)
+colnames(ivy_league) <- c("EIN", "County", "University")
+ivy_league <- ivy_league[, c("University", "County", "EIN")]
+
+# Merge the processed Ivy League table with the table in Q2b
+R1_R2_df_2c <- left_join(R1_R2_df_2b, ivy_league, by = "University") %>%
+  # Transform the missing values of "In Ivy League?" into "No"
+  mutate("In Ivy League?" = if_else(is.na(EIN), "No", "Yes"))
+
+# Inspect missing values in the dataframe
+missing_counts <- c()
+for(col_name in colnames(R1_R2_df_2c)) {
+  missing_counts[col_name] <- sum(is.na(R1_R2_df_2c[col_name]))
+}
+rm(col_name)
+
+# Print the outputs
+print(R1_R2_df_2c)
+print(missing_counts)
+```
+
+The result `Table 3` includes, in addition to `Table 2`, an indicator for whether a university is an Ivy League institution. If yes, there should be the university's county and EIN; otherwise, there are missing values.
+
+From `List 1`, we can see that the number of missing values in Endowment (in USD) and Total Student Number is mild (9, 1, respectively). After checking them back in the webpages, I found they were not provided indeed, so I left them missing.
+
+As for Geographic Coordinates, the number of missing values is also minimal (2). I checked the missing values back on the webpages and found that they are not directly provided but could be accessed on the dedicated webpage of their city location. However, it would be a massive workload for a single sub-question. Therefore, I chose not to deal with them this time.
+
+When it comes to EIN and County, the number of missing values is correct because there are only 8 Ivy League Institutions.
+
+### d. Writing to your relational database
+
+The function is to check for the existence and correct dimensionality of my written table, which takes two arguments: the name of my database, and the name of my table:
+
+```{r Q2d function, echo=TRUE}
+# Function to check the existence and correct dimensionality of the written table
+# The two arguments are the database's name and the table's name
+check_table_dimensions <- function(db_name, table_name) {
+  
+  # Connect to the database
+  con <- dbConnect(RSQLite::SQLite(), dbname = db_name)
+  
+  # Check if the table exists
+  if (dbExistsTable(con, table_name)) {
+    # Retrieve information about the table
+    tbl_info <- dbReadTable(con, table_name)
+    # Close the database connection
+    dbDisconnect(con)
+    # Return information about the table
+    return(list(
+      rows = nrow(tbl_info),
+      columns = ncol(tbl_info),
+      column_names = colnames(tbl_info)
+    ))
+  } else {
+    # Close the database connection
+    dbDisconnect(con)
+    # Return a message if the table does not exist
+    return("Table does not exist.")
+  }
+}
+```
+
+```{r Q2d write}
+# Write the dataframe to the database
+dbWriteTable(db, name = "R1_and_R2_universities_in_the_US",
+             value = R1_R2_df_2c, overwrite = TRUE)
+```
+
+```{r Q2d check}
+# Check the existence and dimensions of the table
+exsitAndDimen_2d <- check_table_dimensions("database/assignment3_jiayu.sqlite",
+                                           "R1_and_R2_universities_in_the_US")
+exsitAndDimen_2d
+```
+
+According to the outcome `List 2`, my written table `R1_and_R2_universities_in_the_US` based on `Table 3` exists in my local relational database `assignment3_jiayu.sqlite`, whose number of rows is 279, number of columns is 11 and column names are correct. Therefore, the written table is exactly the one I want and have written in.
+
+Note: I replace all the whitespaces in the table name with the underscore "_" to facilitate SQL query later. The same goes for the following tables as well.
+
+## Exercise 3 (20 marks)
+
+```{r, include=FALSE}
+library(RSelenium)
+library(xml2)
+library(netstat)
+```
+
+### a. Scraping annual rank
+
+I create here a webscraper function that returns, for the Ivy League university only:
+
+The ARWU ranking for the university for the years 2003, 2013, and 2023. If the university’s rank is given as a range e.g. 76-100, convert this to the midpoint of the range – in this case 88.
+
+The final table is in tidy long format, where each row uniquely identifies a combination of university and year (e.g., Harvard-2003).
+
+```{r Q3a function}
+# Function to scrape annual rank from ARWU
+# The two arguments are "years" - a year vector of the years to scrape, and "unis" - a university vector of the universities to scrape
+scrape_annual_rank <- function(years, unis){
+  
+  # Create empty vectors to store the scraped values
+  world_rank_all <- c()
+  national_rank_all <- c()
+  
+  # Put the fixed search field's xpath in a variable
+  xpath_of_search_field <- "/html/body/div/div/div/div[2]/div/div[2]/div/div[1]/div/div[1]/input"
+  # Start the Selenium server
+  rD <- rsDriver(browser=c("firefox"), verbose = F, port = netstat::free_port(random = TRUE), chromever = NULL) 
+  driver <- rD$client
+  
+  # Iterate over all Ivy League universities
+  for(uni in unis){
+    world_rank <- c()
+    national_rank <- c()
+    for(i in 1:length(years)){
+      yr <- as.character(years[i])
+      url_3a <- paste0("https://www.shanghairanking.com/rankings/arwu/", yr)
+      # Navigate to the assigned URL
+      driver$navigate(url_3a)
+      
+      # Search the university
+      search_field <- driver$findElement(using = "xpath", value = xpath_of_search_field)
+      search_field$sendKeysToElement(list(uni))
+      search_field$sendKeysToElement(list(key = "enter"))
+      # Scrape the world rank
+      world_rank[yr] <- driver$findElement(using = 'xpath', value = '/html/body/div/div/div/div[2]/div/div[2]/div/div[1]/div/div[2]/table/tbody/tr/td[1]/div')$getElementText()
+      # Scrape the national rank
+      national_rank[yr] <- driver$findElement(using = "xpath", value = "/html/body/div/div/div/div[2]/div/div[2]/div/div[1]/div/div[2]/table/tbody/tr/td[4]")$getElementText()
+    }
+    # Store the ranks for one university in the rank vectors for all universities
+    world_rank_all <- c(world_rank_all, unlist(world_rank))
+    national_rank_all <- c(national_rank_all, unlist(national_rank))
+  }
+  # Function to convert the numbers from string to numeric as well as get the midpoint
+  to_numeric <- function(num_str_vec){
+    get_midpoint <- function(str_num){
+      numbers <- str_extract_all(str_num, "([0-9]+)")
+      start <- as.integer(numbers[[c(1,1)]])
+      end <- as.integer(numbers[[c(1,2)]])
+      # Round the non-integer midpoint to its last integer
+      midpoint <- as.integer((start + end) / 2)
+      return(midpoint)
+    }
+    numeric_vector <- c()
+    for(i in 1:length(num_str_vec)){
+      num_str <- num_str_vec[i]
+      if(grepl("-", num_str)){
+        numeric_vector[i] <- get_midpoint(num_str)
+      }else{
+        numeric_vector[i] <- as.integer(num_str)}
+    }
+    return(numeric_vector)
+  }
+  
+  world_rank_numeric <- to_numeric(world_rank_all)
+  national_rank_numeric <- to_numeric(national_rank_all)
+  
+  # Create lists of years and university names respectively to facilitate attaining the required table
+  uni_lst <- rep(unis, each = length(years))
+  year_lst <- rep(years, times = length(unis))
+  
+  # Combine the vector into a dataframe by column
+  table_3a <- data.frame(uni_lst, year_lst, world_rank_numeric, national_rank_numeric)
+  colnames(table_3a) <- c("University", "Year", "World Rank", "National Rank")
+  return(table_3a)
+}
+```
+
+Run the webscraper `scrape_annual_rank(years, unis)`.
+
+```{r Q3a call, cache=TRUE, include=FALSE}
+# Store the years and university names into variables and put them into the function to obtain the table
+year <- c(2003, 2013, 2023)
+ivy_league_uni <- ivy_league$University
+arwu_annual_rank <- scrape_annual_rank(year, ivy_league_uni)
+arwu_annual_rank
+rm(year, ivy_league_uni)
+```
+
+From the outcome `Table 4`, I successfully scraped the ARWU world and national ranks of the 8 Ivy League universities in 2003, 2013 and 2023 and stored them in a tidy long format dataframe.
+
+```{r Q3a write}
+# Write the dataframe to the database
+dbWriteTable(db, name = "ARWU_annual_ranks_for_Ivy_League_universities_in_2003_2013_and_2023",
+             value = arwu_annual_rank, overwrite = TRUE)
+```
+
+```{r Q3a check, echo=TRUE}
+# Check the existence and dimensions of the table
+exsitAndDimen_3a <- check_table_dimensions("database/assignment3_jiayu.sqlite",
+                                        "ARWU_annual_ranks_for_Ivy_League_universities_in_2003_2013_and_2023")
+exsitAndDimen_3a
+```
+
+According to the outcome `List 3`, my written table `ARWU_annual_ranks_for_Ivy_League_universities_in_2003_2013_and_2023` based on `Table 4` exists in my local relational database `assignment3_jiayu.sqlite`, whose number of rows is 24, number of columns is 4 and column names are correct. Therefore, the written table is exactly the one I want and have written in.
+
+### b. Scraping subject ranks for 2023
+
+I generate here a webscraper function that gathers from ARWU for each Ivy League university only:
+
+The rankings of the university for every social science for which the university has been ranked. Again, if a range is given, take the midpoint.
+
+My final table is in tidy long format, where each row uniquely identifies a combination of university and discipline (e.g., Harvard-Economics).
+
+```{r Q3b function}
+# Function to scrape subject ranks for 2023
+# The two arguments are "subjects_vector" - a subject vector of the subjects to scrape, and "university_vector" - a university vector of the universities to scrape
+scrape_subject_rank <- function(subjects_vector, university_vector){
+  # Create an empty tibble to store the scraped values
+  table_3b <- tibble(
+    University = character(),
+    Subject = character(),
+    Rank = numeric()
+  )
+  # URL of the webpage to search for university
+  url_3b <- "https://www.shanghairanking.com/institution"
+  # Start the Selenium server
+  rD <- rsDriver(browser=c("firefox"), verbose = F, port = netstat::free_port(random = TRUE), chromever = NULL) 
+  driver <- rD$client
+  # Fixed xpaths to use later
+  xpath_of_search_field <- "/html/body/div/div/div/div[2]/div[1]/div/div/div/input"
+  xpath_of_match_university <- '/html/body/div/div/div/div[2]/div[2]/div[1]/div[2]/div[1]/div[2]/span'
+  xpath_of_subject_selector <- '/html/body/div/div/div/div[2]/div[2]/div/div[2]/div[2]/div[2]/div[1]/div[1]/div[2]/div/div[1]/input'
+  xpath_of_social_sciences <- '/html/body/div/div/div/div[2]/div[2]/div/div[2]/div[2]/div[2]/div[1]/div[1]/div[2]/div/div[2]/ul/li[6]'
+  xpath_of_table <- '/html/body/div/div/div/div[2]/div[2]/div/div[2]/div[2]/div[2]/div[1]/div[2]/table/tbody'
+ 
+  # Search for the university
+  for(i in 1:length(university_vector)){
+    driver$navigate(url_3b)
+    uni <- university_vector[i]
+    # Use the search field
+    search_field <- driver$findElement(using = "xpath", value = xpath_of_search_field)
+    search_field$sendKeysToElement(list(uni))
+    search_field$sendKeysToElement(list(key ="enter"))
+    # Wait the webpage to load for 2 seconds
+    Sys.sleep(2)
+    # Access the university's webpage
+    uni_link <- driver$findElement(using = "xpath",
+                                   value = xpath_of_match_university)
+    uni_link$clickElement()
+    # Choose the subject category "social sciences"
+    select_subject <- driver$findElement(using = 'xpath',
+                                     value = xpath_of_subject_selector)
+    select_subject$clickElement()
+    
+    choose_social_sciences <- driver$findElement(using = 'xpath',
+                                                 value = xpath_of_social_sciences)
+    choose_social_sciences$clickElement()
+    # Get social sciences subjects and their ranks
+    social_sciences_ranks <- driver$findElement(using = 'xpath',
+                                            value = xpath_of_table)$getElementText()
+    # Split the string into a list of substrings
+    split_list <- unlist(strsplit(unlist(social_sciences_ranks), "\n"))
+    # Store them in 2 vectors for future merging
+    subjects <- c()
+    ranks <- c()
+    # Put the values in their corresponding vectors
+    for(i in 1:(length(split_list)/2)){
+      subjects[i] <- split_list[2*i-1]
+      ranks[i] <-split_list[2*i]
+    }
+    # Function to convert the numbers from string to numeric as well as get the midpoint
+    to_numeric <- function(num_str_vec){
+      get_midpoint <- function(str_num){
+        numbers <- str_extract_all(str_num, "([0-9]+)")
+        start <- as.integer(numbers[[c(1,1)]])
+        end <- as.integer(numbers[[c(1,2)]])
+        # Round the non-integer midpoint to its last integer
+        midpoint <- as.integer((start + end) / 2)
+        return(midpoint)
+      }
+      numeric_vector <- c()
+      for(i in 1:length(num_str_vec)){
+        num_str <- num_str_vec[i]
+        if(grepl("-", num_str)){
+          numeric_vector[i] <- get_midpoint(num_str)
+        }else{
+          numeric_vector[i] <- as.integer(num_str)}
+      }
+      return(numeric_vector)
+    }
+    # Generate the index table for one university and all social sciences subjects
+    index_table <- data.frame(rep(uni, times = length(subjects_vector)),
+                              subjects_vector)
+    colnames(index_table) <- c("University", "Subject")
+    ranks <- to_numeric(ranks)
+    # Combine the two vectors of scraped data into a tibble by column
+    rank_table <- data.frame(subjects, ranks)
+    colnames(rank_table) <- c("Subject", "Rank")
+    # Merge the index table and rank table
+    full_table <- left_join(index_table, rank_table, by = "Subject")
+    table_3b <- rbind(table_3b, full_table)
+  }
+  return(table_3b)
+}
+```
+
+Run the webscraper `scrape_subject_rank(subjects_vector, university_vector)`.
+
+```{r Q3b call, cache=TRUE, include=FALSE}
+social_sciences <- c("Economics", "Statistics", "Law", "Political Sciences", "Sociology", "Education", "Communication", "Psychology", "Business Administration", "Finance", "Management", "Public Administration", "Hospitality & Tourism Management", "Library & Information Science")
+ivy_league_universities <- ivy_league$University
+arwu2023_subject_rank <- scrape_subject_rank(social_sciences, ivy_league_universities)
+arwu2023_subject_rank
+rm(social_sciences, ivy_league_universities)
+```
+As you can see from `Table 5`, I successfully scraped the ARWU subject ranks for every social science of each Ivy League university in 2023 and stored them in a tidy long format dataframe.
+
+If a university does not have a rank for a particular subject, I would leave it a missing value so that the table is uniform.
+
+```{r Q3b write}
+# Write the dataframe to the database
+dbWriteTable(db, name = "ARWU_2023_subject_ranks_for_social_sciences_of_Ivy_League_universities",
+             value = arwu2023_subject_rank, overwrite = TRUE)
+```
+
+```{r Q3b check, echo=TRUE}
+# Check the existence and dimensions of the table
+exsitAndDimen_3b <- check_table_dimensions("database/assignment3_jiayu.sqlite",
+                                           "ARWU_2023_subject_ranks_for_social_sciences_of_Ivy_League_universities")
+exsitAndDimen_3b
+```
+According to the result `List 4`, my written table `ARWU_2023_subject_ranks_for_social_sciences_of_Ivy_League_universities` based on `Table 5` exists in my local relational database `assignment3_jiayu.sqlite`, whose number of rows is 112, number of columns is 3 and column names are correct. Therefore, the written table is exactly the one I want and have written in.
+
+## Exercise 4 (30 marks)
+
+```{r, include=FALSE}
+library("httr")
+library("jsonlite")
+library("tidyverse")
+```
+### a. Gathering financial data from a raw API
+
+For each Ivy League university, I gather financial data from the ProPublica API. Using `httr`, I access the `Organization Method` endpoint for each Ivy League university with their EIN to gather the following variables for the years 2010 - 2020:
+
+1.Total revenue
+
+2.Total assets
+
+After retrieving these data, I format them in a tidy long format, where each row is a unique combination of university and year (e.g., Harvard-2020).
+
+```{r Q4a codes, include=FALSE}
+# Store the EINs and University names in vectors
+ivyLeague_EINs <- ivy_league$EIN
+ivyLeague_unis <- ivy_league$University
+# Create an empty dataframe to keep the retrieved data
+ivyLeague_unis_finance <- data.frame(
+  University = character(0),
+  Year = numeric(0),
+  "Total Revenue" = numeric(0),
+  "Total Assets" = numeric(0)
+)
+# Access all Ivy League universities to retrieve their financial data from API
+for(i in 1:nrow(ivy_league)){
+  base_url <- paste0('https://projects.propublica.org/nonprofits/api/v2/organizations/', ivyLeague_EINs[i], '.json')
+  # Only reserve relevant columns
+  uni_finance <- fromJSON(base_url)$filings_with_data %>%
+    select(tax_prd_yr, totrevenue, totassetsend)
+  # Sort the years
+  uni_finance <- uni_finance[order(uni_finance$tax_prd_yr), ]
+  colnames(uni_finance) <- c("Year", "Total Revenue", "Total Assets")
+  # Build an index table for merging
+  University <- rep(ivyLeague_unis[i], times = (2021-2011) + 1)
+  Year <- 2011:2021
+  index_table <- data.frame(University, Year)
+  # Merge 2 tables to get the table for this university
+  uni_fin_tb <- left_join(index_table, uni_finance, by = "Year")
+  ivyLeague_unis_finance <- rbind(ivyLeague_unis_finance, uni_fin_tb)
+}
+ivyLeague_unis_finance
+rm(base_url, uni_finance, University, Year, index_table, uni_fin_tb, i)
+```
+
+The output `Table 6` has 4 columns: University, Year, Total Revenue and Total Assets, where each row is a unique combination of university and year.
+
+If a university does not have data for a particular year, I would leave it a missing value so that the table is uniform.
+
+```{r Q4a write}
+# Write the dataframe to the database
+dbWriteTable(db, name = "Ivy_League_universities_financial_data_from_2011_to_2021",
+             value = ivyLeague_unis_finance, overwrite = TRUE)
+```
+
+```{r Q4a check, echo=TRUE}
+# Check the existence and dimensions of the table
+exsitAndDimen_4a <- check_table_dimensions("database/assignment3_jiayu.sqlite",
+                                           "Ivy_League_universities_financial_data_from_2011_to_2021")
+exsitAndDimen_4a
+```
+According to the results `List 5`, my written table `Ivy_League_universities_financial_data_from_2011_to_2021` based on `Table 6` exists in my local relational database `assignment3_jiayu.sqlite`, whose number of rows is 88, number of columns is 4 and column names are correct. Therefore, the written table is exactly the one I want and have written in.
+
+### b. Gathering local economic data from a packaged API
+
+```{r, include=FALSE}
+library(tidycensus)
+readRenviron("NYT.env")
+apikey <- Sys.getenv("NYT")
+```
+
+Using the package `tidycensus`, I retrieve the names of all the Counties in the US and their estimated median household income for every county for both 2015 and 2020 (based on the American Community Survey (ACS)).
+
+```{r Q4b codes, include=FALSE}
+# Gather ACS median income data in 2015 and 2020
+acs2015 <- get_acs(geography = "county",
+                   variables = c(medincome = "B19013_001"),
+                   year = 2015)
+acs2020 <- get_acs(geography = "county",
+                   variables = c(medincome = "B19013_001"),
+                   year = 2020)
+# Keep only the county names and the estimated values
+exp_hhincome2015 <- acs2015 %>%
+  select(NAME, estimate)
+colnames(exp_hhincome2015) <- c("County", "Estimated Median Household Income")
+exp_hhincome2020 <- acs2020 %>%
+  select(NAME, estimate)
+colnames(exp_hhincome2020) <- c("County", "Estimated Median Household Income")
+# Keep only the counties where Ivy League Institutions sit and combine the two tibbles
+filtered_exp_hhincome2015 <- left_join(ivy_league, exp_hhincome2015,
+                                       by = 'County') %>%
+  select(-"EIN")
+filtered_exp_hhincome2020 <- left_join(ivy_league, exp_hhincome2020,
+                                       by = 'County') %>%
+  select(-"EIN")
+Year <- rep(c("2015", "2020"), each = nrow(ivy_league))
+ivyLeague_county_est_hhinc <- rbind(filtered_exp_hhincome2015,
+                                    filtered_exp_hhincome2020) %>%
+  cbind(Year)
+ivyLeague_county_est_hhinc <- ivyLeague_county_est_hhinc[, c("University", "Year", "County", "Estimated Median Household Income")]
+rm(exp_hhincome2015, exp_hhincome2020, filtered_exp_hhincome2015, filtered_exp_hhincome2020, Year)
+```
+
+As shown in `Table 7`, I obtain the names of the counties in which Ivy League universities are located and their estimated median household income in 2015 and 2020 (based on the American Community Survey (ACS)) and put them together in a tidy long format, where each row is a unique combination of university and year.
+
+```{r Q4b write}
+# Write the dataframe to the database
+dbWriteTable(db, name = "Ivy_League_universities_counties_and_their_estimated_median_household_income_in_2015_and_2020",
+             value = ivyLeague_county_est_hhinc, overwrite = TRUE)
+```
+
+```{r Q4b check, echo=TRUE}
+# Check the existence and dimensions of the table
+exsitAndDimen_4b <- check_table_dimensions("database/assignment3_jiayu.sqlite",
+                                           "Ivy_League_universities_counties_and_their_estimated_median_household_income_in_2015_and_2020")
+exsitAndDimen_4b
+```
+
+According to the output `List 6`, my written table `Ivy_League_universities_counties_and_their_estimated_median_household_income_in_2015_and_2020` based on `Table 7` exists in my local relational database `assignment3_jiayu.sqlite`, whose number of rows is 16, number of columns is 4 and column names are correct. Therefore, the written table is exactly the one I want and have written in.
+
+## Exercise 5 (20 marks)
+
+After completing Exercises 1 - 4, I have five distinct tables in my relational database `assignment3_jiayu.sqlite`. My goal is now to bring the data stored in the 5 tables together in a variety of ways using SQL, and then analyse the data using R.
+
+### a. Analysis and visualisation
+
+```{r, include=FALSE}
+library(ggplot2)
+```
+
+First, I use SQL to query the 5 tables to get the data I need.
+
+```{r Q5a sqlQuery, include=FALSE}
+# Connect to the SQLite database
+db <- dbConnect(RSQLite::SQLite(),
+                "database/assignment3_jiayu.sqlite")
+
+# Define a series of Common Table Expressions (CTEs) to compute different aggregations and transformations
+  # CTE: rank_yr - Computes the average world rank for each university across the specified years
+  # CTE: rank_subject - Computes the average rank for specific subjects (Economics, Political Sciences, Sociology) in 2023
+  # CTE: endowment - Computes endowment per student for each university
+  # CTE: totrevenue - Computes the average total revenue per student for each university 2015-2020
+  # CTE: medianhhinc - Computes the average estimated median household income for each university's county
+# Finally, combine the results from the CTEs using SELECT and LEFT JOIN operations 
+table_5a <- dbGetQuery(db,
+                      "With
+                        
+                        rank_yr AS (
+                          SELECT 
+                            University,
+                            ROUND(AVG([World Rank]), 0) AS avg_rank_year
+                          FROM ARWU_annual_ranks_for_Ivy_League_universities_in_2003_2013_and_2023
+                          GROUP BY University
+                          ),
+                        
+                        rank_sbject AS (
+                          SELECT
+                            University,
+                            ROUND(AVG([Rank]), 0) AS avg_rank_subject
+                          FROM ARWU_2023_subject_ranks_for_social_sciences_of_Ivy_League_universities
+                          WHERE Subject in ('Economics', 'Political Sciences', 'Sociology')
+                          GROUP BY University
+                          ),
+                        
+                        endowment AS (
+                          SELECT
+                            University,
+                            ([Endowment (in USD)] / [Total Student Number]) AS endow_per_stu,
+                            [Total Student Number]
+                          FROM R1_and_R2_universities_in_the_US
+                        ),
+                        
+                        totrevenue AS (
+                          SELECT
+                            University,
+                            AVG([Total Revenue]) AS avg_totrevenue
+                          FROM Ivy_League_universities_financial_data_from_2011_to_2021
+                          WHERE Year BETWEEN 2015 AND 2020
+                          GROUP BY University
+                        ),
+                        
+                        medianhhinc AS (
+                          SELECT
+                            University,
+                            AVG([Estimated Median Household Income]) AS avg_medianhhinc
+                          FROM Ivy_League_universities_counties_and_their_estimated_median_household_income_in_2015_and_2020
+                          GROUP BY County
+                        )
+                       
+                      SELECT
+                        rank_yr.University,
+                        rank_yr.avg_rank_year,
+                        rank_sbject.avg_rank_subject,
+                        endowment.endow_per_stu,
+                        (totrevenue.avg_totrevenue / [Total Student Number]) AS avg_totrevn_per_stu,
+                        medianhhinc.avg_medianhhinc
+                      FROM rank_yr
+                      LEFT JOIN rank_sbject ON rank_yr.University = rank_sbject.University
+                      LEFT JOIN endowment ON rank_sbject.University = endowment.University
+                      LEFT JOIN totrevenue ON endowment.University = totrevenue.University
+                      LEFT JOIN medianhhinc ON totrevenue.University = medianhhinc.University
+                      ")
+
+# Display the resulting table
+print(table_5a)
+
+# Disconnect from the SQLite database
+dbDisconnect(db)
+```
+
+I have included in `Table 8` the following variables for each Ivy League institution:
+
+  - 1.University name
+  - 2.The average rank of the university across 2003, 2013, and 2023
+  - 3.The average rank of the university’s Economics, Political Science, and Sociology programs, if they were ranked
+  - 4.The current endowment per student (total endowment divided by total number of students), in USD
+  - 5.The average total revenue per student across the years 2015 - 2020, in USD
+  - 6.The average of the median household income for the County across the years 2015 and 2020, in USD
+
+Now it is time to do the data visualisation with `ggplot`.
+
+```{r Q5a plotting}
+# Plot 1: Average university ranking vs. average Econ/PS/Soc ranking
+plot5a1 <- ggplot(table_5a, aes(x = avg_rank_year, y = avg_rank_subject)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Average University Ranking vs. Average Econ/PS/Soc Ranking",
+       x = "Average University Ranking",
+       y = "Average Econ/PS/Soc Ranking")
+
+# Plot 2: Average university ranking vs. endowment per student
+plot5a2 <- ggplot(table_5a, aes(x = avg_rank_year, y = endow_per_stu)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Average University Ranking vs. Endowment per Student",
+       x = "Average University Ranking",
+       y = "Endowment per Student (USD)")
+
+# Plot 3: Endowment per student vs. average median household income
+plot5a3 <- ggplot(table_5a, aes(x = endow_per_stu, y = avg_medianhhinc)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Endowment per Student vs. Average Median Household Income",
+       x = "Endowment per Student (USD)",
+       y = "Average Median Household Income (USD)")
+
+# Plot 4: Average revenue per student vs. average median household income
+plot5a4 <- ggplot(table_5a, aes(x = avg_totrevn_per_stu, y = avg_medianhhinc)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Average Revenue per Student vs. Average Median Household Income",
+       x = "Average Revenue per Student (USD)",
+       y = "Average Median Household Income (USD)")
+
+# Save the plots as separate variables for inclusion in the HTML file
+plot5a1
+plot5a2
+plot5a3
+plot5a4
+```
+
+I draw the relationships between the variables as required in the question. Here are my comments on these relationships (for Ivy League institutions only) :
+
+In `Figure 1.1`, we can see a positive relationship between a university's average ranking and average Econ/PS/Soc ranking. It is reasonable as the average ranking can represent this university's overall strength, and a higher average rank (smaller in rank number) makes it more likely to perform well in a particular subject as well.
+
+In `Figure 1.2`, a negative relationship exists between a university's average ranking and endowment per student. It also matches the common sense that a better university (with a smaller rank number) would have more outstanding alums who are more likely to endow their mother university. However, it is interesting that most (6 in 8) of the Ivy League institutions' average rankings are within 25, but their endowment per student numbers vary a lot; it is significant to consider other factors when looking at these elite universities, such as the total student number and the subjects they are good at.
+
+In `Figure 1.3`, there is a positive relationship between a university's average endowment per student and the average median household income where they sit. Since these universities enrol nationwide students, the relationship is a little surprising. One possible explanation could be that the universities whose data points are near the trend line enrol more local students, while those far from the line have a more diverse student background.
+
+In `Figure 1.4`, there is a slightly positive relationship between a university's average total revenue per student and average median household income. If looking back `Figure 1.3`, it is interesting that its number of outliers is the same as that in `Figure 1.4`. If the outliers in `Figure 1.3` are exactly that in `Figure 1.4`, I'd love to draw a preliminary conclusion that 5 Ivy League institutions are more localised, while the other three welcome more students nationwide.
+
+### b. Visualisation of geographic data
+
+```{r, include=FALSE}
+library(tigris)
+library(sf)
+library(ggmap)
+library(tmap)
+```
+
+
+I use SQL to query the table `R1_and_R2_universities_in_the_US` to get the data I need.
+
+```{r Q5b sqlQuery, include=FALSE}
+# Connect to the SQLite database
+db <- dbConnect(RSQLite::SQLite(),
+                "database/assignment3_jiayu.sqlite")
+
+# Select the columns needed
+table_5b <- dbGetQuery(db,
+                       "SELECT
+                          University,
+                          [Geographic Coordinates],
+                          Status,
+                          [In Ivy League?]
+                        FROM R1_and_R2_universities_in_the_US
+                       ")
+
+# Display the resulting table
+print(table_5b)
+
+# Disconnect from the SQLite database
+dbDisconnect(db)
+```
+
+`Table 9` gained from the query consists of 4 variables for every R1 and R2 university:
+
+  - 1.University name
+  - 2.Geographic coordinates
+  - 3.Status (public vs. private)
+  - 4.Whether the university is an Ivy League institution
+  
+To enable turning `Table 9` into a spatial object for plotting, I first turn my character coordinates into numeric ones identifiable by `st_as_sf()`.
+  
+```{r 5b get latitude and longitude, include=FALSE}
+# Define patterns for latitude and longitude extraction from the "Geographic Coordinates" column
+lat_pattern <- "([0-9.°′″]+[NS])"
+lon_pattern <- "([0-9.°′″]+[WE])"
+
+# Initialize empty vectors for latitude and longitude
+latitude <- c()
+longitude <- c()
+
+# Extract latitude and longitude values from "Geographic Coordinates" using regular expressions
+geo_cordinates <- table_5b$`Geographic Coordinates`
+for(coordinates in geo_cordinates){
+  latitude <- c(latitude, str_extract(coordinates, lat_pattern))
+  longitude <- c(longitude, str_extract(coordinates, lon_pattern))
+}
+rm(coordinates, geo_cordinates) # Remove temporary variables
+
+# Add latitude and longitude columns to the original dataframe
+table_5b <- table_5b %>%
+  mutate(Latitude = latitude,
+         Longitude = longitude)
+
+# Given that there only 2 missing values in geographical coordinates, filter the universities whose coordinates are hard to scrape
+filtered_table_5b <- table_5b %>%
+  filter(!is.na(table_5b$Latitude)) %>%
+  select(-`Geographic Coordinates`)
+
+# Function to extract numeric values and directions from different coordinate formats
+extract_coordinates <- function(coord_string) {
+  if (grepl("″", coord_string)) {
+    # Handle degree-minute-second format (e.g., "42°20′06″ N")
+    numeric_deg <- as.numeric(gsub("°.*", "", coord_string))
+    numeric_min <- as.numeric(gsub("′.*", "", gsub(".*°", "", coord_string)))
+    numeric_sec <- as.numeric(gsub("″.*", "", gsub(".*′", "", coord_string)))
+  
+    numeric_value <- numeric_deg + numeric_min/60 + numeric_sec/3600
+    direction <- substr(coord_string, nchar(coord_string), nchar(coord_string))
+  } else if (grepl("′", coord_string)) {
+    # Handle degree-minute format (e.g., "37°13.5′N")
+    numeric_deg <- as.numeric(gsub("°.*", "", coord_string))
+    numeric_min <- as.numeric(gsub("′.*", "", gsub(".*°", "", coord_string)))
+  
+    numeric_value <- numeric_deg + numeric_min/60
+    direction <- substr(coord_string, nchar(coord_string), nchar(coord_string))
+  } else {
+    # Handle decimal degree format (e.g., "33.4209°N")
+    numeric_value <- as.numeric(gsub("°[NSEW]", "", coord_string))
+    direction <- substr(coord_string, nchar(coord_string), nchar(coord_string))
+  }
+  if (direction %in% c("S", "W")) {
+    numeric_value <- -numeric_value
+  }
+  return(numeric_value)
+}
+
+# Apply the function to extract numeric values
+filtered_table_5b$Latitude <- sapply(filtered_table_5b$Latitude, extract_coordinates)
+filtered_table_5b$Longitude <- sapply(filtered_table_5b$Longitude, extract_coordinates)
+```
+
+Let's do the data visualisation with it using `tmap`.
+
+```{r Q5b plot prep, include=FALSE}
+# Load the USA shapefile
+usa_shapefile <- tigris::states()
+
+# Create a spatial object with points
+university_sf <- st_as_sf(filtered_table_5b, coords = c("Longitude", "Latitude"), crs = 4326)
+
+# Set tmap mode to "view" for interactive plotting
+tmap_mode("view")
+```
+
+```{r Q5b plot}
+# Plot the map
+plot_5b <- tm_shape(usa_shapefile) + # Use the shapefile of the USA as the base layer
+  tm_borders() + # Add borders to the map
+  tm_shape(university_sf) +
+  
+  # Plot all R1 and R2 universities, color-coded by status (public vs. private)
+  tm_dots(col = "Status", palette = c("blue", "red"),
+          size = 0.05, title = "University Status") +
+  
+  # Plot only Ivy League universities as contrasting points
+  tm_shape(university_sf[university_sf$`In Ivy League?` == "Yes", ]) +
+  tm_dots(col = "In Ivy League?", size = 0.05, title = "Ivy League") +
+  
+  # Adjust the layout and legend settings
+  tm_layout(title = "Distribution of R1 and R2 Universities in the USA") +
+  tm_legend(legend.title.size = 0.5)
+
+# Display the interactive map
+plot_5b
+```
+
+In the `Figure 2` we can see:
+
+1. **Ivy League Concentration:**
+   - Ivy League universities are typically concentrated in the northeastern United States, with a significant presence in states like Massachusetts, New York, Pennsylvania, and Connecticut.
+   - Cities such as Boston, New York City, and Philadelphia host multiple Ivy League institutions.
+
+2. **Private and Public Universities:**
+   - Private universities, including Ivy League institutions, concentrate more in more affluent and metropolitan areas, typically New England, Los Angeles, Chicago Metropolitan Area, Texas and southeastern Florida.
+   - On the contrary, Public universities are distributed more broadly and evenly, including in less densely populated regions and across various states.
+
+3. **Under-Resourced Areas:**
+   - The trend is more in the east and west, less in the middle. The number of research universities drastically decreases as it crosses the line from the east, which starts from the boundary between North Dakota and Minnesota and goes straight down to Houston.
+   - Parts of the United States that are less densely populated or located in rural areas may appear under-resourced in terms of research universities; typically, the states sit in or near the Rocky Mountains.
+   - States with fewer universities, especially major research institutions, may be perceived as having fewer resources dedicated to research and development.
+
+4. **Possible Explanations:**
+   - The concentration of Ivy League universities in the Northeast is historically rooted and influenced by factors such as the establishment of early prestigious educational institutions in the region.
+   - Richer and metropolitan areas tend to attract a higher density of private universities due to cultural, economic, and historical factors. The availability of financial resources, the cultural emphasis on education, the economic opportunities afforded by prosperous areas, the wealthier population in which more students can afford the tuition fees and living costs, and the longer historical development of educational institutions all contribute to the clustering of private universities in such locales.
+   - The distribution of public universities can be influenced by state funding priorities, population density, historical development and economic considerations. The states having few state universities highly overlap with the under-sourced areas.
+      - Public universities often rely heavily on state funding for their operations and development. Considering social justice and sustainable development, every state would have at least one public university. However, wealthier states would have the financial resources to support more public universities.
+      - The distribution of public universities is intricately linked to population density and demographic trends. States with higher population densities may support a more significant number of universities to meet the educational demands of their residents.
+      - The historical development of a region plays a pivotal role in shaping the distribution of universities. Areas with a long-standing commitment to education and research may have well-established public universities with rich academic traditions. Legacy institutions, often established in the past, contribute to the overall landscape and may influence the concentration of R1 and R2 universities.
+      - Economic factors, including regional economic strength and industrial development, can impact the ability of states to invest in higher education. Economic growth may attract research and development activities, leading to the establishment or expansion of public research universities. Moreover, proximity to industrial hubs and innovation clusters can stimulate collaborative research initiatives between public universities and private entities.
+
+
+## Appendix: All code in this assignment
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+# this chunk generates the complete code appendix. 
+# eval=FALSE tells R not to run (``evaluate'') the code here (it was already run before).
+```
