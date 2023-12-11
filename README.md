@@ -17,52 +17,57 @@ For clarity, the formatting requirements for each assignment are:
 
 # Exercise 1 (5 Marks)#
 
-This assignment will take us through a workflow that a data scientist might encounter in the real world, from data collection right through to analysis. Throughout this assignment we are going to use a local relational database to store a variety of different but related tables that we collect and may want to combine in various ways. We will want to ensure that each table within our database can be joined to every other table using a primary key.
+This assignment will take us through a workflow that a data scientist might encounter in the real world, from data collection right through to analysis. Throughout this assignment we are going to use a local relational database to store a variety of different but related tables that we collect and may want to combine in various ways. We will want to ensure that each table within our database can be joined to every other table using a `primary key`.
 
 We will start by creating an empty local relational database. You should store this new database in a ‘database’ folder that you create within your assignment folder. Follow these steps:
 
-1. Use the DBI::dbConnect() function in R to create a new SQLite database (either YOUR_DB_NAME.sqlite or YOUR_DB_NAME.db) in your database folder.
-2. Use the file.exists() function in R to check for the existence of your relational database.
-Include in the main text of your .html submission the code that created the database *and* the code that checks for its existence *and* the output of that check.
+1. Use the `DBI::dbConnect()` function in `R` to create a new `SQLite` database (either `YOUR_DB_NAME.sqlite` or `YOUR_DB_NAME.db`) in your database folder.
+2. Use the `file.exists()` function in R to check for the existence of your relational database.
+Include in the main text of your `.html` submission the code that created the database **and** the code that checks for its existence **and** the output of that check.
 
-Exercise 2 (25 marks)
-a. Gathering structured data
+# Exercise 2 (25 marks) #
+
+## a. Gathering structured data ##
 Write an automatic webscraping function in R that constructs a table (as e.g. a data frame, a tibble, or a data table) of all R1 (Very High Research Activity) and R2 (High Research Activity) Research Universities in the United States of America. These data can be found on wikipedia.
 
 Your initial scraper should collect five variables:
 
-The university’s name
-It’s status (public or private)
-The city in which it is located
-The state in which it is located
-The URL of the university’s dedicated Wikipedia page
-b. Gathering unstructured data
+1. The university’s name
+2. It’s status (public or private)
+3. The city in which it is located
+4. The state in which it is located
+5. The URL of the university’s dedicated Wikipedia page
+
+## b. Gathering unstructured data ##
 Extend your webscraping function (or create a new function) so that it navigates to the dedicated Wikipedia page for each university, and captures three additional variables:
 
-The geographic coordinates of the (main) university campus
-The endowment of the university in USD dollars
-The total number of students (including both undergraduate and postgraduate)
-c. Data munging
-Download from the course website the ivyleague.csv file and store it appropriately on your local machine. We are going to use this file to focus our attention only on the subset of U.S. universities that are known as the “Ivy League.”1 This file includes a shortened version of each university’s name, the County and State in which the university’s main campus is located (we will use these variables later), and the university’s Employer Identification Number (EIN – we will use this variable later). Call this file into R and create three new variables in your main table:
+6. The geographic coordinates of the (main) university campus
+7. The endowment of the university in USD dollars
+8. The total number of students (including both undergraduate and postgraduate)
 
-An indicator for whether the university is an Ivy League institution
-The university’s county (it would be wise to concatenate both county and state into a single string, separated by “,”)
-The university’s EIN (which can be missing for those universities not in the Ivy League)
-d. Writing to your relational database
-Once you have combined all of the above data into a single table, ensure that it is in a tidy format where each row is a unique university, and each column is a variable (of which there should be exactly 11). Write this table to your relational database, making sure you give it an appropriate and clear name. Remember to ensure you have a primary key (e.g. the university name) that uniquely identifies each unit (university) in your table.
+## c. Data munging ##
+Download from the course website the `ivyleague.csv` file and store it appropriately on your local machine. We are going to use this file to focus our attention only on the subset of U.S. universities that are known as the “Ivy League.”1 This file includes a **shortened** version of each university’s name, the County and State in which the university’s main campus is located (we will use these variables later), and the university’s Employer Identification Number (EIN – we will use this variable later). Call this file into R and create three new variables in your main table:
 
-Create a function to check for the existence and correct dimensionality of your written table. The function should take two arguments: the name of your database, and the name of your table. If the table exists, the function should report as output the number of rows in the table, the number of columns in the table, and the names of the columns. For all of Exercise 2 it is sufficient for you to include just the code chunk that defines the function and the output of the function in the main section of your submitted .html file.
+9. An indicator for whether the university is an Ivy League institution
+10. The university’s county (it would be wise to concatenate both county and state into a single string, separated by “,”)
+11. The university’s EIN (which can be missing for those universities not in the Ivy League)
 
-Exercise 3 (20 marks)
-We are now going to use the Rselenium package to explore the Academic Ranking of World Universities.2
+## d. Writing to your relational database ##
+Once you have combined all of the above data into a single table, ensure that it is in a tidy format where each row is a unique university, and each column is a variable (of which there should be exactly 11). Write this table to your relational database, making sure you give it an **appropriate** and **clear** name. Remember to ensure you have a **primary key** (e.g. the university name) that uniquely identifies each unit (university) in your table.
 
-a. Scraping annual rank
-Create a webscraper that returns, for the Ivy League university only:
+Create a function to check for the existence and correct dimensionality of your written table. The function should take two arguments: the name of your database, and the name of your table. If the table exists, the function should report as output the number of rows in the table, the number of columns in the table, and the names of the columns. **For all of Exercise 2** it is sufficient for you to include just the code chunk that defines the function and the output of the function in the main section of your submitted `.html` file.
 
-The ARWU ranking for the university for the years 2003, 2013, and 2023. If the university’s rank is given as a range e.g. 76-100, convert this to the midpoint of the range – in this case 88.
-Your final table should be in tidy long format, where each row uniquely identifies a combination of university and year (e.g., Harvard-2003). Write the data as a new table – appropriately and clearly named – to your relational database. Check for the existence and correct dimensionality of your written table using the function you wrote in Exercise 2.d. Include only the call to the function and the output in the main section of your .html file.
+# Exercise 3 (20 marks) #
+We are now going to use the `Rselenium` package to explore the Academic Ranking of World Universities.2
 
-b. Scraping subject ranks for 2023
+## a. Scraping annual rank ##
+Create a webscraper that returns, for the **Ivy League university only**:
+
+* The ARWU ranking for the university for the years 2003, 2013, and 2023. If the university’s rank is given as a range e.g. 76-100, convert this to the midpoint of the range – in this case 88.
+
+Your final table should be in tidy long format, where each row uniquely identifies a combination of university and year (e.g., Harvard-2003). Write the data as a new table – appropriately and clearly named – to your relational database. Check for the existence and correct dimensionality of your written table using the function you wrote in Exercise 2.d. Include only the call to the function and the output in the main section of your `.html` file.
+
+## b. Scraping subject ranks for 2023
 Extend your webscraper (or create a new one) that gathers for each Ivy League university only:
 
 The rankings of the university for every social science for which the university has been ranked. Again, if a range is given, take the midpoint.
