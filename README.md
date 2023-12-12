@@ -58,7 +58,7 @@ Once you have combined all of the above data into a single table, ensure that it
 Create a function to check for the existence and correct dimensionality of your written table. The function should take two arguments: the name of your database, and the name of your table. If the table exists, the function should report as output the number of rows in the table, the number of columns in the table, and the names of the columns. **For all of Exercise 2** it is sufficient for you to include just the code chunk that defines the function and the output of the function in the main section of your submitted `.html` file.
 
 # Exercise 3 (20 marks) #
-We are now going to use the `Rselenium` package to explore the Academic Ranking of World Universities.2
+We are now going to use the `Rselenium` package to explore the Academic Ranking of World Universities.
 
 ## a. Scraping annual rank ##
 Create a webscraper that returns, for the **Ivy League university only**:
@@ -75,7 +75,7 @@ Extend your webscraper (or create a new one) that gathers for **each Ivy League 
 Your final table should be in tidy long format, where each row uniquely identifies a combination of university and discipline (e.g., Harvard-Economics). Write the data as a new table – appropriately and clearly named – to your relational database. Check for the existence and correct dimensionality of your written table using the function you wrote in Exercise 2.d. Include only the call to the function and the output in the main section of your `.html` file.
 
 # Exercise 4 (30 marks)
-We are now going to gather a variety of additional data for each Ivy League university only from two APIs.
+We are now going to gather a variety of additional data for each **Ivy League university** only from two APIs.
 
 ## a. Gathering financial data from a raw API
 First, for each **Ivy League university only** we are going to gather financial data from the ProPublica API. Using `httr`, access the `Organization Method` endpoint for each Ivy League university, using the EIN variable provided in Exercise 2.c, to gather the following variables for the years 2010 - 2020:
@@ -113,6 +113,7 @@ Using `ggplot`, include in the main section of your `.html` four compelling, wel
 2. average university ranking and endowment per student
 3. average endowment per student and average median household income
 4. average revenue per student and average median household income
+
 Comment on the relationships you find. Are any of them particularly interesting?
 
 ## b. Visualisation of geographic data
@@ -122,11 +123,13 @@ Using SQL, call into R from your relational database a table that includes, for 
 2. Geographic coordinates
 3. Status (public vs. private)
 4. Whether the university is an Ivy League institution
+
 Retrieve a shapefile of the United States using the `tigris` package (or, if you prefer the `tidycensus` package, but `tigris` is easier). Using either the `tmap` package or the `ggmap` package, include in the main section of your `.html` a visually clear and compelling map that is appropriately labelled which shows:
 
 1. every R1 and R2 university, excluding the Ivy League institutions, as a point
 2. where the colour of the points varies by status (public vs. private)
 3. Ivy League universities as contrasting points
+
 Is there any notable pattern to where the Ivy League universities concentrated? What about private and public universities? Do any parts of the United States appear particularly under-resourced in terms of research universities? How might you explain the patterns you observe?
 
 Note: You can decide what geographies to include (see the documentation for more details, but to retrieve just an outline of the USA you could use `tigris::nation()`, or to retrieve an outline of the states you could use `tigris::states()`, etc.). You may also need to use the `sf` and `sp` packages, depending on your workflow.
